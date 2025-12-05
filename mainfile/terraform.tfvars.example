@@ -1,0 +1,20 @@
+# Terraform Variables Configuration
+# Copy this file to terraform.tfvars and fill in your values
+
+# Environment Configuration
+environment      = "dev3"
+application_name = "ace-guardian"
+location         = "eastus"
+
+# Storage Account (REQUIRED)
+storage_account_name = ""  # Replace with your storage account name
+
+# Function Package (OPTIONAL - leave empty if deploying code separately)
+function_package_url = ""
+
+# Event Hub (OPTIONAL)
+eventhub_namespace = ""  # Format: my-ehns.servicebus.windows.net
+
+# Log Analytics (OPTIONAL - has default fallback)
+log_analytics_workspace_id = ""
+

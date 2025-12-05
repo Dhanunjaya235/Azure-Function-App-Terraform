@@ -1,0 +1,15 @@
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tf.lock.hcl
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+terraform.tfvars
+lambda_payload.zip
