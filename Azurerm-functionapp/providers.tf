@@ -5,7 +5,7 @@ terraform {
       version = "1.4.0"
     }
     azurerm = {
-      source  = "hashicorp/azurerm"
+      source = "hashicorp/azurerm"
     }
   }
 }
@@ -21,6 +21,9 @@ provider "azurerm" {
       recover_soft_deleted_certificates = true
       recover_soft_deleted_keys         = true
       recover_soft_deleted_secrets      = true
+    }
+    resource_group {
+      prevent_deletion_if_contains_resources = false
     }
   }
   storage_use_azuread = true

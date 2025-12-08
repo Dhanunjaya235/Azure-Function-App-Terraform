@@ -85,4 +85,5 @@ module "functionapp" {
   eventhub_namespace   = var.eventhub_namespace
   umi_client_id       = azurerm_user_assigned_identity.umi.client_id
   log_analytics_workspace_id = var.log_analytics_workspace_id
+  use_service_plan    = var.use_service_plan
 }

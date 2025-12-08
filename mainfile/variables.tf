@@ -34,6 +34,12 @@ variable "eventhub_namespace" {
   default     = ""
 }
 
+variable "use_service_plan" {
+  type        = bool
+  description = "Set to true to deploy the Function App on a dedicated/premium App Service Plan. Defaults to false for Consumption plan."
+  default     = false
+}
+
 
 variable "log_analytics_workspace_id" {
   type        = string

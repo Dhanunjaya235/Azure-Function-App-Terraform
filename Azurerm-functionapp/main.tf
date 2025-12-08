@@ -18,10 +18,6 @@ locals {
       value = "python"
     },
     {
-      name  = "WEBSITE_CONTENTOVERVNET"
-      value = "1"
-    },
-    {
       name  = "AzureWebJobsStorage__accountName"
       value = var.storage_account_name
     },
@@ -34,6 +30,13 @@ locals {
       value = "managedidentity"
     }
   ]
+
+  vnet_app_settings = var.use_service_plan ? [
+    {
+      name  = "WEBSITE_CONTENTOVERVNET"
+      value = "1"
+    }
+  ] : []
 
   package_settings = var.function_package_url != "" ? [
     {
@@ -57,14 +60,127 @@ locals {
     }
   ] : []
 
-  app_settings = concat(local.base_app_settings, local.package_settings, local.eventhub_settings)
+  app_settings = concat(local.base_app_settings, local.vnet_app_settings, local.package_settings, local.eventhub_settings)
+
+  # Common site config shared across modes
+  site_config_base = {
+    appSettings    = local.app_settings
+    linuxFxVersion = "python|3.11"
+    ftpsState      = "FtpsOnly"
+    http20Enabled  = false
+    minTlsVersion  = "1.2"
+  }
+
+  # Extras for Premium/Dedicated plan deployments
+  site_config_premium_extras = {
+    autoHealEnabled                         = false
+    acrUseManagedIdentityCreds              = false
+    alwaysOn                                = true
+    azureStorageAccounts                    = {}
+    detailedErrorLoggingEnabled             = true
+    functionAppScaleLimit                   = 0
+    functionsRuntimeScaleMonitoringEnabled  = false
+    localMySqlEnabled                       = false
+    loadBalancing                           = "LeastRequests"
+    minimumElasticInstanceCount             = 0
+    numberOfWorkers                         = 1
+    preWarmedInstanceCount                  = 0
+    scmMinTlsVersion                        = "1.2"
+    scmIpSecurityRestrictionsUseMain        = false
+    scmIpSecurityRestrictionsDefaultAction  = "Deny"
+    use32BitWorkerProcess                   = true
+    vnetRouteAllEnabled                     = true
+    vnetPrivatePortsCount                   = 0
+    webSocketsEnabled                       = false
+    ipSecurityRestrictions = [
+      {
+        ipAddress   = "159.53.0.0/16"
+        action      = "Allow"
+        tag         = "Default"
+        priority    = 400
+        name        = "JPMCCIDR1"
+        description = "JPMCCIDR1"
+      },
+      {
+        ipAddress   = "146.143.0.0/16"
+        action      = "Allow"
+        tag         = "Default"
+        priority    = 401
+        name        = "JPMCCIDR2"
+        description = "JPMCCIDR2"
+      },
+      {
+        ipAddress   = "170.148.0.0/16"
+        action      = "Allow"
+        tag         = "Default"
+        priority    = 402
+        name        = "JPMCCIDR3"
+        description = "JPMCCIDR3"
+      },
+      {
+        ipAddress   = "103.246.196.0/23"
+        action      = "Allow"
+        tag         = "Default"
+        priority    = 403
+        name        = "JPMCCIDR4"
+        description = "JPMCCIDR4"
+      },
+      {
+        ipAddress   = "161.121.0.0/16"
+        action      = "Allow"
+        tag         = "Default"
+        priority    = 404
+        name        = "JPMCCIDR5"
+        description = "JPMCCIDR5"
+      },
+      {
+        ipAddress   = "Any"
+        action      = "Deny"
+        priority    = 2147483647
+        name        = "Deny all"
+        description = "Deny all access"
+      }
+    ]
+  }
+
+  # Stub extras for Consumption to align object shape for conditional expression
+  site_config_consumption_extras = {
+    autoHealEnabled                        = null
+    acrUseManagedIdentityCreds             = null
+    alwaysOn                               = null
+    azureStorageAccounts                   = {}
+    detailedErrorLoggingEnabled            = null
+    functionAppScaleLimit                  = null
+    functionsRuntimeScaleMonitoringEnabled = null
+    localMySqlEnabled                      = null
+    loadBalancing                          = null
+    minimumElasticInstanceCount            = null
+    numberOfWorkers                        = null
+    preWarmedInstanceCount                 = null
+    scmMinTlsVersion                       = null
+    scmIpSecurityRestrictionsUseMain       = null
+    scmIpSecurityRestrictionsDefaultAction = null
+    use32BitWorkerProcess                  = null
+    vnetRouteAllEnabled                    = null
+    vnetPrivatePortsCount                  = null
+    webSocketsEnabled                      = null
+    ipSecurityRestrictions                 = []
+  }
+
+  site_config = merge(
+    local.site_config_base,
+    var.use_service_plan ? local.site_config_premium_extras : local.site_config_consumption_extras
+  )
 }
 
 resource "azurerm_service_plan" "service_plan" {
+  count = var.use_service_plan ? 1 : 0
+
   name                = var.spfunc_name
   location            = var.location
   resource_group_name = var.resource_group_name
   tags                = {}
+
   os_type                  = "Linux"
   per_site_scaling_enabled = false
   sku_name                 = "P1v3"
@@ -95,116 +211,53 @@ resource "azapi_resource" "function_guardian" {
   location  = var.location
   tags      = {}
   schema_validation_enabled = false
+
   identity {
-    type         = "SystemAssigned, UserAssigned"
-    identity_ids = [var.umi_id]
+    type         = var.umi_id != "" ? "SystemAssigned, UserAssigned" : "SystemAssigned"
+    identity_ids = var.umi_id != "" ? [var.umi_id] : []
   }
+
   body = jsonencode({
     kind = "functionapp,linux"
-    properties = {
-      vnetImagePullEnabled      = true
-      vnetContentShareEnabled   = true
-      clientAffinityEnabled     = false
-      clientCertEnabled         = false
-      clientCertMode            = "Required"
-      enabled                   = true
-      hostNamesDisabled         = false
-      httpsOnly                 = true
-      hyperV                    = false
-      isXenon                   = false
-      keyVaultReferenceIdentity = "SystemAssigned"
-      publicNetworkAccess       = "Disabled"
-      redundancyMode            = "None"
-      reserved                  = true
-      scmSiteAlsoStopped        = false
-      serverFarmId              = azurerm_service_plan.service_plan.id
-      storageAccountRequired    = false
-      virtualNetworkSubnetId    = var.subnet_id
-      cors = {
+    properties = merge(
+      {
+        clientAffinityEnabled     = false
+        clientCertEnabled         = false
+        clientCertMode            = "Required"
+        enabled                   = true
+        hostNamesDisabled         = false
+        httpsOnly                 = true
+        hyperV                    = false
+        isXenon                   = false
+        keyVaultReferenceIdentity = "SystemAssigned"
+        redundancyMode            = "None"
+        reserved                  = true
+        scmSiteAlsoStopped        = false
+        storageAccountRequired    = false
+        cors = {
           "allowedOrigins"     = var.allowed_origins,
           "supportCredentials" = false
         }
-      siteConfig = {
-        autoHealEnabled            = false
-        acrUseManagedIdentityCreds = false
-        alwaysOn                   = true
-        appSettings = local.app_settings
-        azureStorageAccounts                   = {}
-        detailedErrorLoggingEnabled            = true
-        functionAppScaleLimit                  = 0
-        functionsRuntimeScaleMonitoringEnabled = false
-        ftpsState                              = "FtpsOnly"
-        http20Enabled                          = false
-        #ipSecurityRestrictionsDefaultAction    = "Deny"
-        linuxFxVersion                         = "python|3.11"
-        localMySqlEnabled                      = false
-        loadBalancing                          = "LeastRequests"
-        minTlsVersion                          = "1.2"
-        minimumElasticInstanceCount            = 0
-        numberOfWorkers                        = 1
-        preWarmedInstanceCount                 = 0
-        scmMinTlsVersion                       = "1.2"
-        scmIpSecurityRestrictionsUseMain       = false
-        scmIpSecurityRestrictionsDefaultAction = "Deny"
-        use32BitWorkerProcess                  = true
-        vnetRouteAllEnabled                    = true
-        vnetPrivatePortsCount                  = 0
-        webSocketsEnabled                      = false
-        ipSecurityRestrictions = [
-          {
-            ipAddress   = "159.53.0.0/16"
-            action      = "Allow"
-            tag         = "Default"
-            priority    = 400
-            name        = "JPMCCIDR1"
-            description = "JPMCCIDR1"
-          },
-          {
-            ipAddress   = "146.143.0.0/16"
-            action      = "Allow"
-            tag         = "Default"
-            priority    = 401
-            name        = "JPMCCIDR2"
-            description = "JPMCCIDR2"
-          },
-          {
-            ipAddress   = "170.148.0.0/16"
-            action      = "Allow"
-            tag         = "Default"
-            priority    = 402
-            name        = "JPMCCIDR3"
-            description = "JPMCCIDR3"
-          },
-          {
-            ipAddress   = "103.246.196.0/23"
-            action      = "Allow"
-            tag         = "Default"
-            priority    = 403
-            name        = "JPMCCIDR4"
-            description = "JPMCCIDR4"
-          },
-          {
-            ipAddress   = "161.121.0.0/16"
-            action      = "Allow"
-            tag         = "Default"
-            priority    = 404
-            name        = "JPMCCIDR5"
-            description = "JPMCCIDR5"
-          },
-          {
-            ipAddress   = "Any"
-            action      = "Deny"
-            priority    = 2147483647
-            name        = "Deny all"
-            description = "Deny all access"
-          }
-        ]
+      },
+      var.use_service_plan ? {
+        publicNetworkAccess = "Disabled"
+        serverFarmId        = azurerm_service_plan.service_plan[0].id
+        virtualNetworkSubnetId = var.subnet_id
+        vnetImagePullEnabled   = true
+        vnetContentShareEnabled = true
+      } : {
+        publicNetworkAccess = "Enabled"
+      },
+      {
+        siteConfig = local.site_config
       }
-    }
+    )
   })
 }
 
 resource "azurerm_private_endpoint" "funcapp_endpoint" {
+  count = var.use_service_plan ? 1 : 0
+
   name                = format("%s-%s", var.functionapp_name, "funcend")
   location            = var.location
   resource_group_name = var.resource_group_name

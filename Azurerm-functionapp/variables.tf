@@ -165,6 +165,12 @@ variable "spfunc_name" {
   default = ""
 }
 
+variable "use_service_plan" {
+  type        = bool
+  description = "Toggle to deploy the Function App on a dedicated/premium App Service Plan. When false, the app is deployed on the Consumption plan without creating a service plan."
+  default     = false
+}
+
 variable "subnet_id" {
   type        = string
   description = "Subnet ID for Function App"
